@@ -127,6 +127,9 @@ class Bomb(pg.sprite.Sprite):
         self.rect.centerx = emy.rect.centerx
         self.rect.centery = emy.rect.centery+emy.rect.height//2
         self.speed = 6
+        # ========== 追加機能3：EMP用の状態管理 ==========
+        self.state = "active"  # active: 通常状態, inactive: EMP無効化状態
+        # ========== 追加機能3：ここまで ==========
 
     def update(self):
         """
@@ -278,6 +281,47 @@ class Score:
         screen.blit(self.image, self.rect)
 
 
+# ========== 追加機能3：電磁パルス（EMP）クラス ここから ==========
+class EMP(pg.sprite.Sprite):
+    """
+    電磁パルス（EMP）に関するクラス
+    発動時に存在する敵機と爆弾を無効化する
+    """
+    def __init__(self, emys: pg.sprite.Group, bombs: pg.sprite.Group, screen: pg.Surface):
+        """
+        電磁パルスを発動する
+        引数1 emys：敵機グループ
+        引数2 bombs：爆弾グループ
+        引数3 screen：画面Surface
+        """
+        super().__init__()
+        # 全画面に黄色の半透明矩形を0.05秒表示
+        self.image = pg.Surface((WIDTH, HEIGHT))
+        pg.draw.rect(self.image, (255, 255, 0), (0, 0, WIDTH, HEIGHT))
+        self.image.set_alpha(128)
+        self.rect = self.image.get_rect()
+        self.life = 2  # 0.05秒表示（50FPSで約2-3フレーム）
+        
+        # 敵機を無効化
+        for emy in emys:
+            emy.interval = float('inf')  # 爆弾投下できなくなる
+            emy.image = pg.transform.laplacian(emy.image)  # ラプラシアンフィルタ適用
+        
+        # 爆弾を無効化
+        for bomb in bombs:
+            bomb.speed /= 2  # 速度を半減
+            bomb.state = "inactive"  # 状態を無効化
+
+    def update(self):
+        """
+        EMPエフェクトを更新する
+        """
+        self.life -= 1
+        if self.life < 0:
+            self.kill()
+# ========== 追加機能3：電磁パルス（EMP）クラス ここまで ==========
+
+
 def main():
     pg.display.set_caption("真！こうかとん無双")
     screen = pg.display.set_mode((WIDTH, HEIGHT))
@@ -289,6 +333,9 @@ def main():
     beams = pg.sprite.Group()
     exps = pg.sprite.Group()
     emys = pg.sprite.Group()
+    # ========== 追加機能3：EMPグループの追加 ==========
+    emps = pg.sprite.Group()  # EMPグループ
+    # ========== 追加機能3：ここまで ==========
     gravs = pg.sprite.Group()
 
     tmr = 0
@@ -300,6 +347,13 @@ def main():
                 return 0
             if event.type == pg.KEYDOWN and event.key == pg.K_SPACE:
                 beams.add(Beam(bird))
+            # ========== 追加機能3：EMP発動処理 ここから ==========
+            # 電磁パルス発動（Eキー）：スコアが20より大きい場合のみ
+            if event.type == pg.KEYDOWN and event.key == pg.K_e:
+                if score.value > 20:
+                    emps.add(EMP(emys, bombs, screen))
+                    score.value -= 20  # スコア20を消費
+            # ========== 追加機能3：EMP発動処理 ここまで ==========
             #feature2
             if event.type == pg.KEYDOWN and event.key == pg.K_RETURN:
                 if score.value > 200 and len(gravs) == 0:
@@ -328,12 +382,19 @@ def main():
             exps.add(Explosion(bomb, 50))  # 爆発エフェクト
             score.value += 1  # 1点アップ
 
+        # ========== 追加機能3：無効化された爆弾の衝突処理 ここから ==========
+        # こうかとんと爆弾の衝突判定（無効化された爆弾は起爆せずに消滅）
         for bomb in pg.sprite.spritecollide(bird, bombs, True):  # こうかとんと衝突した爆弾リスト
+            if bomb.state == "inactive":
+                # 無効化された爆弾は起爆せずに消滅するだけ
+                continue
+            # 通常の爆弾はゲームオーバー
             bird.change_img(8, screen)  # こうかとん悲しみエフェクト
             score.update(screen)
             pg.display.update()
             time.sleep(2)
             return
+        # ========== 追加機能3：無効化された爆弾の衝突処理 ここまで ==========
         #feature2
         for bomb in pg.sprite.groupcollide(bombs, gravs, True, False).keys():
             exps.add(Explosion(bomb, 50))
@@ -350,6 +411,10 @@ def main():
         bombs.draw(screen)
         exps.update()
         exps.draw(screen)
+        # ========== 追加機能3：EMPの更新と描画 ==========
+        emps.update()
+        emps.draw(screen)
+        # ========== 追加機能3：ここまで ==========
         gravs.update()
         gravs.draw(screen)
         score.update(screen)
