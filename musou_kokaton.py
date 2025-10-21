@@ -9,6 +9,7 @@ import pygame as pg
 WIDTH = 1100  # ゲームウィンドウの幅
 HEIGHT = 650  # ゲームウィンドウの高さ
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
+BEAM_NUM = 20
 
 
 def check_bound(obj_rct: pg.Rect) -> tuple[bool, bool]:
@@ -141,14 +142,15 @@ class Beam(pg.sprite.Sprite):
     """
     ビームに関するクラス
     """
-    def __init__(self, bird: Bird):
+    def __init__(self, bird: Bird, angle=0):
         """
         ビーム画像Surfaceを生成する
         引数 bird：ビームを放つこうかとん
         """
         super().__init__()
         self.vx, self.vy = bird.dire
-        angle = math.degrees(math.atan2(-self.vy, self.vx))
+        angle = angle
+        angle = math.degrees(math.atan2(-self.vy, self.vx)) + angle 
         self.image = pg.transform.rotozoom(pg.image.load(f"fig/beam.png"), angle, 1.0)
         self.vx = math.cos(math.radians(angle))
         self.vy = -math.sin(math.radians(angle))
@@ -166,6 +168,23 @@ class Beam(pg.sprite.Sprite):
         if check_bound(self.rect) != (True, True):
             self.kill()
 
+class NeoBeam(pg.sprite.Sprite):
+    """
+    攻撃するビームのクラス
+    """
+    def __init__(self, bird, num):
+        super().__init__() 
+        self.angles = [i for i in range(-50,51,(int(100/(num-1))))]
+        self.num = num
+        self.bird = bird
+        self.rect = bird.rect
+
+    def gen_beams(self):
+        beams=[]
+        for i in range(self.num):
+            beam = Beam(self.bird, self.angles[i])
+            beams.append(beam)
+        return beams
 
 class Explosion(pg.sprite.Sprite):
     """
@@ -263,6 +282,9 @@ def main():
                 return 0
             if event.type == pg.KEYDOWN and event.key == pg.K_SPACE:
                 beams.add(Beam(bird))
+            if event.type == pg.KEYDOWN and key_lst[pg.K_LSHIFT] and event.key == pg.K_SPACE: 
+                # raise ValueError 
+                beams.add(NeoBeam(bird, BEAM_NUM).gen_beams())
         screen.blit(bg_img, [0, 0])
 
         if tmr%200 == 0:  # 200フレームに1回，敵機を出現させる
