@@ -241,6 +241,23 @@ class Enemy(pg.sprite.Sprite):
             self.state = "stop"
         self.rect.move_ip(self.vx, self.vy)
 
+class Gravity(pg.sprite.Sprite):
+    """
+    重力場に関するクラス
+    """
+    def __init__(self, life: int):
+        super().__init__()
+        self.image = pg.Surface((WIDTH, HEIGHT))
+        self.image.fill((0, 0, 0))
+        self.image.set_alpha(120)
+        self.rect = self.image.get_rect()
+        self.life = life
+
+    def update(self):
+        self.life -= 1
+        if self.life < 0:
+            self.kill()
+
 
 class Score:
     """
@@ -272,6 +289,7 @@ def main():
     beams = pg.sprite.Group()
     exps = pg.sprite.Group()
     emys = pg.sprite.Group()
+    gravs = pg.sprite.Group()
 
     tmr = 0
     clock = pg.time.Clock()
@@ -282,10 +300,16 @@ def main():
                 return 0
             if event.type == pg.KEYDOWN and event.key == pg.K_SPACE:
                 beams.add(Beam(bird))
+            #feature2
+            if event.type == pg.KEYDOWN and event.key == pg.K_RETURN:
+                if score.value > 200 and len(gravs) == 0:
+                    gravs.add(Gravity(400))
+                    score.value -= 200
             if event.type == pg.KEYDOWN and key_lst[pg.K_LSHIFT] and event.key == pg.K_SPACE: 
                 # raise ValueError 
                 beams.add(NeoBeam(bird, BEAM_NUM).gen_beams())
         screen.blit(bg_img, [0, 0])
+
 
         if tmr%200 == 0:  # 200フレームに1回，敵機を出現させる
             emys.add(Enemy())
@@ -310,7 +334,13 @@ def main():
             pg.display.update()
             time.sleep(2)
             return
+        #feature2
+        for bomb in pg.sprite.groupcollide(bombs, gravs, True, False).keys():
+            exps.add(Explosion(bomb, 50))
+        for emy in pg.sprite.groupcollide(emys, gravs, True, False).keys():
+            exps.add(Explosion(emy, 100))
 
+    
         bird.update(key_lst, screen)
         beams.update()
         beams.draw(screen)
@@ -320,6 +350,8 @@ def main():
         bombs.draw(screen)
         exps.update()
         exps.draw(screen)
+        gravs.update()
+        gravs.draw(screen)
         score.update(screen)
         pg.display.update()
         tmr += 1
