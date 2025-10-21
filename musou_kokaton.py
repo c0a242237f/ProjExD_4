@@ -13,9 +13,9 @@ os.chdir(os.path.dirname(os.path.abspath(__file__)))
 
 def check_bound(obj_rct: pg.Rect) -> tuple[bool, bool]:
     """
-    オブジェクトが画面内or画面外を判定し，真理値タプルを返す関数
-    引数：こうかとんや爆弾，ビームなどのRect
-    戻り値：横方向，縦方向のはみ出し判定結果（画面内：True／画面外：False）
+    オブジェクトが画面内or画面外を判定し,真理値タプルを返す関数
+    引数：こうかとんや爆弾,ビームなどのRect
+    戻り値：横方向,縦方向のはみ出し判定結果（画面内：True/画面外：False）
     """
     yoko, tate = True, True
     if obj_rct.left < 0 or WIDTH < obj_rct.right:
@@ -27,7 +27,7 @@ def check_bound(obj_rct: pg.Rect) -> tuple[bool, bool]:
 
 def calc_orientation(org: pg.Rect, dst: pg.Rect) -> tuple[float, float]:
     """
-    orgから見て，dstがどこにあるかを計算し，方向ベクトルをタプルで返す
+    orgから見て,dstがどこにあるかを計算し,方向ベクトルをタプルで返す
     引数1 org：爆弾SurfaceのRect
     引数2 dst：こうかとんSurfaceのRect
     戻り値：orgから見たdstの方向ベクトルを表すタプル
@@ -47,6 +47,14 @@ class Bird(pg.sprite.Sprite):
         pg.K_LEFT: (-1, 0),
         pg.K_RIGHT: (+1, 0),
     }
+
+    state = ()  # こうかとんの状態(通常、 無敵)
+    hyper_life = 0
+
+    #発動条件が満たされたら
+    def activate_hyper(self):
+        self.state = "hyper"
+        self.hyper_life = 500  # ハイパー状態の持続時間
 
     def __init__(self, num: int, xy: tuple[int, int]):
         """
@@ -87,6 +95,8 @@ class Bird(pg.sprite.Sprite):
         押下キーに応じてこうかとんを移動させる
         引数1 key_lst：押下キーの真理値リスト
         引数2 screen：画面Surface
+        引数3 state：こうかとんの状態(通常、 無敵)
+        こうかとんが無敵状態の時，残り時間を管理
         """
         sum_mv = [0, 0]
         for k, mv in __class__.delta.items():
@@ -100,6 +110,11 @@ class Bird(pg.sprite.Sprite):
             self.dire = tuple(sum_mv)
             self.image = self.imgs[self.dire]
         screen.blit(self.image, self.rect)
+        if self.state == "hyper":  # こうかとんが無敵状態の時
+            self.image = pg.transform.laplacian(self.image)  # 無敵エフェクト
+            self.hyper_life -= 1
+            if self.hyper_life <= 0:
+                self.state = ()  # 無敵状態解除
 
 
 class Bomb(pg.sprite.Sprite):
@@ -214,7 +229,7 @@ class Enemy(pg.sprite.Sprite):
     def update(self):
         """
         敵機を速度ベクトルself.vyに基づき移動（降下）させる
-        ランダムに決めた停止位置_boundまで降下したら，_stateを停止状態に変更する
+        ランダムに決めた停止位置_boundまで降下したら,_stateを停止状態に変更する
         引数 screen：画面Surface
         """
         if self.rect.centery > self.bound:
@@ -263,6 +278,9 @@ def main():
                 return 0
             if event.type == pg.KEYDOWN and event.key == pg.K_SPACE:
                 beams.add(Beam(bird))
+            if event.type == pg.KEYDOWN and event.key == pg.K_RSHIFT and score.value > 100:
+                score.value -= 100
+                bird.activate_hyper()
         screen.blit(bg_img, [0, 0])
 
         if tmr%200 == 0:  # 200フレームに1回，敵機を出現させる
@@ -275,14 +293,18 @@ def main():
 
         for emy in pg.sprite.groupcollide(emys, beams, True, True).keys():  # ビームと衝突した敵機リスト
             exps.add(Explosion(emy, 100))  # 爆発エフェクト
-            score.value += 10  # 10点アップ
+            score.value += 100  # 10点アップ
             bird.change_img(6, screen)  # こうかとん喜びエフェクト
 
         for bomb in pg.sprite.groupcollide(bombs, beams, True, True).keys():  # ビームと衝突した爆弾リスト
             exps.add(Explosion(bomb, 50))  # 爆発エフェクト
-            score.value += 1  # 1点アップ
+            score.value += 10  # 1点アップ
 
         for bomb in pg.sprite.spritecollide(bird, bombs, True):  # こうかとんと衝突した爆弾リスト
+            if bird.state == "hyper":
+                exps.add(Explosion(bomb, 50))  # 爆発エフェクト
+                score.value += 1  # 1点アップ
+                continue
             bird.change_img(8, screen)  # こうかとん悲しみエフェクト
             score.update(screen)
             pg.display.update()
