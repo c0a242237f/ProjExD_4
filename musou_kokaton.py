@@ -6,6 +6,7 @@ import time
 import pygame as pg
 
 
+
 WIDTH = 1100  # ゲームウィンドウの幅
 HEIGHT = 650  # ゲームウィンドウの高さ
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
@@ -277,6 +278,72 @@ class Gravity(pg.sprite.Sprite):
             self.kill()
 
 
+class Shield(pg.sprite.Sprite):
+    """
+    防御壁に関するクラス (追加機能5)
+    """
+    def __init__(self, bird: Bird, life: int):
+        """
+        防御壁Surfaceを生成する
+        引数1 bird：防御壁を張るこうかとん
+        引数2 life：防御壁の表示時間
+        """
+        super().__init__()
+        self.bird = bird  # こうかとんインスタンスを保持
+        self.life = life
+        
+        # 1. 元となる（回転していない）"横長"の矩形を self.image_orig として保持
+        #    (仕様書とは幅と高さを逆に定義し、回転で調整する)
+        self.width_orig = bird.rect.height * 2 # 元画像の幅 (長い方)
+        self.height_orig = 20                # 元画像の高さ (短い方 = 仕様書の「横幅」)
+        
+        self.image_orig = pg.Surface((self.width_orig, self.height_orig), pg.SRCALPHA)
+        pg.draw.rect(self.image_orig, (0, 0, 255), self.image_orig.get_rect())  # 青色
+
+        # 2. self.image と self.rect を初期化
+        self.image = self.image_orig
+        self.rect = self.image.get_rect()
+        
+        # 3. 初期の回転と位置を update() で設定
+        self.update() 
+
+    def update(self):
+        """
+        防御壁の残り時間を減らし、こうかとんの向きと位置に追従する
+        """
+        self.life -= 1
+        if self.life < 0:
+            self.kill()
+            return # killしたら以降の処理は不要
+
+        # 1. こうかとんの向き(dire)に基づいて角度を計算
+        vx, vy = self.bird.dire
+        
+        # 2. "横長"の元画像(image_orig)を、進行方向(atan2) + 90度 回転させる
+        #    (進行方向と垂直にするため)
+        angle = math.degrees(math.atan2(-vy, vx)) + 90
+        
+        self.image = pg.transform.rotozoom(self.image_orig, angle, 1.0)
+        
+        # 3. 回転後の画像に基づいて self.rect を再取得
+        new_rect = self.image.get_rect()
+
+        # 4. こうかとんの前方に位置を計算
+        norm = math.sqrt(vx**2 + vy**2)
+        if norm == 0:
+            nvx, nvy = 1.0, 0.0  # 停止時は右向きをデフォルト
+        else:
+            nvx, nvy = vx / norm, vy / norm
+        
+        # 距離 = こうかとんの幅/2 + "シールドの元の高さ(短い方)"/2 + マージン
+        distance = (self.bird.rect.width / 2) + (self.height_orig / 2) + 10 
+        
+        new_rect.centerx = self.bird.rect.centerx + nvx * distance
+        new_rect.centery = self.bird.rect.centery + nvy * distance
+        
+        self.rect = new_rect # 最終的な位置をセット
+
+
 class Score:
     """
     打ち落とした爆弾，敵機の数をスコアとして表示するクラス
@@ -352,6 +419,7 @@ def main():
     emps = pg.sprite.Group()  # EMPグループ
     # ========== 追加機能3：ここまで ==========
     gravs = pg.sprite.Group()
+    shields = pg.sprite.Group() # 防御壁グループを追加
 
     tmr = 0
     clock = pg.time.Clock()
@@ -380,6 +448,14 @@ def main():
             if event.type == pg.KEYDOWN and event.key == pg.K_RSHIFT and score.value > 100:
                 score.value -= 100
                 bird.activate_hyper()
+            
+            # 防御壁の発動処理 (追加)
+            if event.type == pg.KEYDOWN and event.key == pg.K_s:
+                # 条件：スコア50より大、かつ、シールドが存在しない
+                if score.value > 50 and len(shields) == 0:
+                    shields.add(Shield(bird, 400)) # life=400フレーム
+                    score.value -= 50 # スコア消費
+
         screen.blit(bg_img, [0, 0])
 
 
@@ -398,7 +474,11 @@ def main():
 
         for bomb in pg.sprite.groupcollide(bombs, beams, True, True).keys():  # ビームと衝突した爆弾リスト
             exps.add(Explosion(bomb, 50))  # 爆発エフェクト
-            score.value += 10  # 1点アップ
+            score.value += 1  # 1点アップ
+        
+        # シールドと爆弾の衝突判定 (追加)
+        # 衝突した爆弾(True)は消滅、シールド(False)は消滅しない
+        pg.sprite.groupcollide(bombs, shields, True, False)
 
         # ========== 追加機能3：無効化された爆弾の衝突処理 ここから ==========
         # こうかとんと爆弾の衝突判定（無効化された爆弾は起爆せずに消滅）
@@ -439,6 +519,10 @@ def main():
         # ========== 追加機能3：ここまで ==========
         gravs.update()
         gravs.draw(screen)
+        
+        shields.update() # シールドの更新 (追加)
+        shields.draw(screen) # シールドの描画 (追加)
+        
         score.update(screen)
         pg.display.update()
         tmr += 1
